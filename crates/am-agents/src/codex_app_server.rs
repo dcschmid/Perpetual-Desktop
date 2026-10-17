@@ -1379,6 +1379,9 @@ mod tests {
             policy: Some(crate::AgentPolicyRuntime {
                 denied_mcp_servers: vec!["untrusted".into()],
                 allowed_tools: vec!["mcp__github__search".into()],
+                codex_config_overrides: vec![
+                    "skills.config=[{path=\"/tmp/skills/review\",enabled=false}]".into(),
+                ],
                 ..Default::default()
             }),
             approver: None,
@@ -1396,6 +1399,11 @@ mod tests {
         assert!(args
             .iter()
             .any(|arg| arg == "mcp_servers.github.enabled_tools=[\"search\"]"));
+        assert!(args.windows(2).any(|pair| pair
+            == [
+                "-c",
+                "skills.config=[{path=\"/tmp/skills/review\",enabled=false}]"
+            ]));
     }
 
     #[test]

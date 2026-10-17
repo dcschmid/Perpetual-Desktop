@@ -864,6 +864,16 @@ impl AppCore {
                 .collect::<Vec<_>>();
             add_managed_git_safe_directories(&mut runtime_policy.launch_env, &managed_repos)?;
         }
+        if backend == ExecutionBackend::Host {
+            let links =
+                am_db::repos::agent_thread_repo::list_for_thread(&self.db.pool, thread_id).await?;
+            let repo_ids = links
+                .into_iter()
+                .map(|link| link.repo_id)
+                .collect::<Vec<_>>();
+            self.prepare_extensions(agent, &repo_ids, &workspace_path, &mut runtime_policy)
+                .await?;
+        }
         let mut prompt = match (&message, has_history) {
             (Some(msg), _) if prior.is_some() => build_thread_followup_prompt(&thread, &msg.text),
             (Some(msg), _) => {

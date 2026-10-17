@@ -269,6 +269,10 @@ pub(crate) fn push_host_runtime_args(args: &mut Vec<String>, runtime: &crate::Se
 /// app-server, and silently applying MCP restrictions only to the exec fallback
 /// would make the effective policy depend on which transport happened to start.
 pub(crate) fn push_policy_args(args: &mut Vec<String>, policy: &crate::AgentPolicyRuntime) {
+    for value in &policy.codex_config_overrides {
+        args.push("-c".into());
+        args.push(value.clone());
+    }
     if !policy.allowed_mcp_servers.is_empty() {
         for server in &policy.allowed_mcp_servers {
             if server == "perpetual" {

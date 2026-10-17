@@ -333,6 +333,13 @@ fn handle_control_request(
 }
 
 fn push_policy_args(args: &mut Vec<String>, policy: &crate::AgentPolicyRuntime) {
+    if let Some(path) = &policy.claude_mcp_config {
+        args.extend([
+            "--strict-mcp-config".into(),
+            "--mcp-config".into(),
+            path.to_string_lossy().into_owned(),
+        ]);
+    }
     if !policy.allowed_tools.is_empty() {
         args.push("--allowedTools".into());
         args.push(policy.allowed_tools.join(" "));
@@ -973,6 +980,38 @@ mod tests {
         let args = build_args(&spec, None);
         assert!(!args.iter().any(|arg| arg == "--model" || arg == "gpt-5.5"));
         assert!(args.windows(2).any(|pair| pair == ["--effort", "minimal"]));
+    }
+
+    #[test]
+    fn extension_config_is_passed_as_a_file_for_start_and_resume() {
+        let spec = SessionSpec {
+            worktree: "/tmp/worktree".into(),
+            prompt: "Do it".into(),
+            model: None,
+            reasoning: None,
+            local_model: None,
+            permission: PermissionPolicy::Ask,
+            runtime: crate::SessionRuntime::default(),
+            policy: Some(crate::AgentPolicyRuntime {
+                claude_mcp_config: Some("/tmp/private config/mcp.json".into()),
+                denied_tools: vec!["Skill(review)".into()],
+                ..Default::default()
+            }),
+            approver: None,
+        };
+        let prior = SessionRef {
+            agent_session_id: "existing".into(),
+        };
+        for resume in [None, Some(&prior)] {
+            let args = build_args(&spec, resume);
+            assert!(args.iter().any(|arg| arg == "--strict-mcp-config"));
+            assert!(args
+                .windows(2)
+                .any(|pair| pair == ["--mcp-config", "/tmp/private config/mcp.json"]));
+            assert!(args
+                .windows(2)
+                .any(|pair| pair == ["--disallowedTools", "Skill(review)"]));
+        }
     }
 
     #[test]

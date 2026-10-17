@@ -45,6 +45,7 @@ mod context_index;
 mod context_scoring;
 mod error;
 mod evaluator;
+mod extensions;
 mod fallback;
 mod github;
 mod layout;

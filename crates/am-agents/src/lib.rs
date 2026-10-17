@@ -150,6 +150,10 @@ pub struct AgentPolicyRuntime {
     /// never serialized or logged.
     pub launch_env: Vec<(String, String)>,
     pub provider_account_id: Option<String>,
+    /// Non-secret native skill enablement overrides, shared by both Codex adapters.
+    pub codex_config_overrides: Vec<String>,
+    /// Private, core-owned MCP configuration; never serialize its contents.
+    pub claude_mcp_config: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for AgentPolicyRuntime {

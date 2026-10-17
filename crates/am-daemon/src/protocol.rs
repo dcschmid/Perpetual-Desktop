@@ -67,6 +67,13 @@ pub struct RpcRequest {
 #[serde(rename_all = "snake_case")]
 pub enum DaemonRequest {
     Ping,
+    ListExtensions(am_proto::ExtensionScope),
+    SetExtensionEnabled(am_proto::SetExtensionEnabled),
+    ImportSkill {
+        scope: am_proto::ExtensionScope,
+        source: String,
+    },
+    AddMcpServer(am_proto::AddMcpServer),
 
     // Projects
     ListProjects,
@@ -430,6 +437,7 @@ pub enum DaemonRequest {
 #[serde(rename_all = "snake_case")]
 pub enum DaemonResponse {
     Pong,
+    ExtensionCatalog(am_proto::ExtensionCatalog),
     Unit,
     Project(Project),
     ProjectOpt(Option<Project>),

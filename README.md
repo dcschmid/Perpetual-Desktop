@@ -16,6 +16,18 @@ Setup installs Codex CLI if neither Codex nor Claude Code is available. You can 
 
 Sign-ins stay on your computer. Setup tokens are stored in Windows Credential Manager, the macOS Keychain, or the Linux kernel keyring, not in Perpetual's database. Linux kernel keyring entries can expire and are cleared on reboot; setup tokens may need to be added again.
 
+## Skills and MCP
+
+Open **Settings → Skills & MCP** to discover existing Codex and Claude Code extensions, import a skill folder, add a stdio or HTTP MCP server, and enable or disable extensions. Choose **Global** for defaults across local projects, or a connected repository for project overrides. Changes apply to the next local task or conversation run.
+
+Perpetual reads Codex skills from `~/.agents/skills`, `$CODEX_HOME/skills` (normally `~/.codex/skills`), and a repository's `.agents/skills`. It reads Claude Code skills from `$CLAUDE_CONFIG_DIR/skills` (normally `~/.claude/skills`) and a repository's `.claude/skills`. Imports include supporting scripts and assets. Plugin and bundled extensions remain managed by their CLI.
+
+MCP servers use native configuration: Codex `config.toml` / project `.codex/config.toml`, and Claude Code `~/.claude.json` / project `.mcp.json`. Custom `CODEX_HOME` and `CLAUDE_CONFIG_DIR` locations are respected. New servers accept environment variable names for credentials. Variables must be available to the desktop app; OAuth login remains a CLI action in the selected account's profile.
+
+Project MCP servers require explicit activation in Perpetual. Changing a server's project configuration requires activating it again. Codex project servers receive the project-specific **CLI name** shown in Settings; use that name for OAuth login and explicit MCP tool references. Their transports are cached as disabled entries in the selected native profile and activated only for the matching run. This keeps credentials out of process arguments and prevents concurrent projects from replacing each other's servers.
+
+Isolated accounts inherit extension configuration and skill folders while keeping their own sign-in credentials. Missing project skills are made available in managed worktrees; generated links use private worktree Git exclusions so they stay out of task commits while the original project files remain available to commit. Existing worktree skill files are preserved. Claude Code local runs use a private, filtered MCP configuration; plugin MCP servers need a direct server entry to participate. Docker and cloud runs continue to use their own installed extensions, configuration and credentials.
+
 ## Build from source
 
 Install [Git](https://git-scm.com/downloads) and Node.js 24 LTS (also supported: Node 22.13+ on 22.x, or 26+). Use Windows, macOS, or a glibc-based Linux distribution with WebKitGTK 4.1 (Ubuntu 22.04+, Debian 12+, Linux Mint 21+, or equivalent). Linux source builds support x86_64 and ARM64; CI packages target x86_64. On Windows, [App Installer](https://apps.microsoft.com/detail/9nblggh4nns1) provides `winget` for installing missing system tools.

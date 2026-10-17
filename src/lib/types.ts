@@ -1,4 +1,24 @@
 export type AgentKind = 'claude_code' | 'codex';
+
+export interface ExtensionScope {
+  agent: AgentKind;
+  repo_id: string | null;
+}
+
+export interface ExtensionCatalog {
+  skills: { name: string; description: string; path: string; project: boolean; enabled: boolean }[];
+  mcp_servers: {
+    id: string;
+    name: string;
+    runtime_name: string;
+    transport: string;
+    source: string;
+    project: boolean;
+    enabled: boolean;
+  }[];
+  locations: string[];
+  warnings: string[];
+}
 export type TaskStatus =
   | 'draft'
   | 'queued'

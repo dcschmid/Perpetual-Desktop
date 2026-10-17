@@ -405,6 +405,10 @@ impl AppCore {
             runtime_policy.launch_env = account.env;
             runtime_policy.provider_account_id = Some(account.id);
         }
+        if backend == ExecutionBackend::Host {
+            self.prepare_extensions(agent, &[repo.id.clone()], &worktree, &mut runtime_policy)
+                .await?;
+        }
         let spec = SessionSpec {
             worktree,
             prompt: match (&message, prior.is_some()) {

@@ -228,6 +228,21 @@ pub async fn dispatch(core: &AppCore, req: DaemonRequest) -> Result<DaemonRespon
 
     Ok(match req {
         Q::Ping => A::Pong,
+        Q::ListExtensions(scope) => {
+            A::ExtensionCatalog(core.list_extensions(scope).await.map_err(s)?)
+        }
+        Q::SetExtensionEnabled(input) => {
+            core.set_extension_enabled(input).await.map_err(s)?;
+            A::Unit
+        }
+        Q::ImportSkill { scope, source } => {
+            core.import_skill(scope, source).await.map_err(s)?;
+            A::Unit
+        }
+        Q::AddMcpServer(input) => {
+            core.add_mcp_server(input).await.map_err(s)?;
+            A::Unit
+        }
 
         Q::ListProjects => A::Projects(core.list_projects().await.map_err(s)?),
         Q::CreateProject(input) => A::Project(core.create_project(input).await.map_err(s)?),

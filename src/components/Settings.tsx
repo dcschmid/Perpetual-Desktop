@@ -15,6 +15,7 @@ import {
   Check,
   CircleAlert,
   CircleCheck,
+  Puzzle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Theme } from '../App';
@@ -22,6 +23,7 @@ import { action, native, rpc } from '../lib/api';
 import { errorMessage, providerName } from '../lib/format';
 import { useStore } from '../lib/store';
 import { credentialStore, keys } from '../lib/platform';
+import { ExtensionsSettings } from './ExtensionsSettings';
 import type {
   AgentKind,
   CloudAvailability,
@@ -49,6 +51,7 @@ const REPO = 'https://github.com/SakethSripada/Perpetual-Desktop';
 const sections = [
   { id: 'general', label: 'General', icon: Monitor },
   { id: 'models', label: 'Models', icon: Cpu },
+  { id: 'extensions', label: 'Skills & MCP', icon: Puzzle },
   { id: 'cloud', label: 'Cloud', icon: Cloud },
   { id: 'local_model', label: 'Local models', icon: Cpu },
 ] as const;
@@ -80,6 +83,7 @@ export function Settings({ theme, setTheme }: { theme: Theme; setTheme: (v: Them
         <div className="min-w-0 flex-1">
           {section === 'general' && <General theme={theme} setTheme={setTheme} />}
           {section === 'models' && <ModelSettings />}
+          {section === 'extensions' && <ExtensionsSettings />}
           {section === 'cloud' && <CloudSettings />}
           {section === 'local_model' && <LocalModelSettings />}
         </div>
