@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { REPO, detectPlatform, type Platform } from '../lib/site';
 import type { Release } from '../lib/release';
 import { fileMatchesSha256 } from '../lib/checksum';
-import { AppleLogo, WindowsLogo } from './Mark';
+import { AppleLogo, WindowsLogo, TerminalLogo } from './Mark';
 
 export type DownloadPlatform = Exclude<Platform, 'other'>;
 
@@ -67,9 +67,12 @@ function InstallDialog({
   const [verification, setVerification] = useState<Verification>({ status: 'idle' });
   const asset = release.downloads[platform];
   const isWindows = platform === 'windows';
+  const isLinux = platform === 'linux';
   const checksumCommand = isWindows
     ? `Get-FileHash .\\${asset.name} -Algorithm SHA256`
-    : `shasum -a 256 ${asset.name}`;
+    : isLinux
+      ? `sha256sum ${asset.name}`
+      : `shasum -a 256 ${asset.name}`;
 
   useEffect(() => {
     const element = dialog.current;
@@ -118,8 +121,14 @@ function InstallDialog({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="flex items-center gap-2 text-[13px] font-medium text-muted">
-              {isWindows ? <WindowsLogo size={15} /> : <AppleLogo size={15} />}
-              {isWindows ? 'Windows x64' : 'macOS universal'}
+              {isWindows ? (
+                <WindowsLogo size={15} />
+              ) : isLinux ? (
+                <TerminalLogo size={15} />
+              ) : (
+                <AppleLogo size={15} />
+              )}
+              {isWindows ? 'Windows x64' : isLinux ? 'Linux x86_64' : 'macOS universal'}
             </p>
             <h2
               id="install-dialog-title"
@@ -166,6 +175,14 @@ function InstallDialog({
                 </svg>{' '}
                 <strong className="font-medium text-ink">Run anyway</strong>. You can verify the
                 checksum below. Managed PCs may block unsigned apps.
+              </p>
+            ) : isLinux ? (
+              <p className="mt-2">
+                Make <span className="font-medium text-ink">{asset.name}</span> executable in its
+                file properties and open it. Requires Ubuntu 22.04 / Debian 12 or newer, or a
+                comparable distribution. If FUSE is unavailable, run the AppImage from your terminal
+                with <code>--appimage-extract-and-run</code>. Debian, Ubuntu, and Mint users can
+                also install the .deb package from the release page.
               </p>
             ) : (
               <p className="mt-2">

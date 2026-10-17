@@ -32,6 +32,25 @@ export function WindowsLogo({ size = 15 }: { size?: number }) {
   );
 }
 
+export function TerminalLogo({ size = 15 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="4" width="20" height="16" rx="3" />
+      <path d="m6 9 3 3-3 3m6 0h5" />
+    </svg>
+  );
+}
+
 export function AppleLogo({ size = 15 }: { size?: number }) {
   return (
     <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} fill="currentColor">

@@ -28,6 +28,7 @@ fn candidate_dirs() -> Vec<PathBuf> {
     if let Some(home) = home_dir() {
         dirs.push(home.join(".claude/local"));
         dirs.push(home.join(".codex/bin"));
+        dirs.push(home.join(".perpetual/tools/node_modules/.bin"));
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".npm-global/bin"));
         dirs.push(home.join(".bun/bin"));

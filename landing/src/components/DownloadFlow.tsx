@@ -103,9 +103,25 @@ function SourceDialog({ platform, onClose }: { platform: Platform; onClose: () =
               ? 'PowerShell'
               : platform === 'mac'
                 ? 'Terminal'
-                : 'PowerShell on Windows or Terminal on macOS'}{' '}
+                : platform === 'linux'
+                  ? 'your terminal'
+                  : 'PowerShell on Windows or a terminal on macOS/Linux'}{' '}
             and run:
           </p>
+          {platform === 'linux' && (
+            <p className="mt-4">
+              Use Ubuntu 22.04+, Debian 12+, Linux Mint 21+, or a comparable glibc-based
+              distribution. Setup installs system dependencies with apt on Debian/Ubuntu/Mint. Other
+              distributions need the{' '}
+              <a
+                className="text-ink underline"
+                href="https://v2.tauri.app/start/prerequisites/#linux"
+              >
+                Tauri Linux prerequisites
+              </a>{' '}
+              installed first.
+            </p>
+          )}
           <div className="mt-3 flex flex-col items-start gap-4 rounded-xl border border-line bg-black/30 p-4">
             <pre className="w-full min-w-0 overflow-x-auto text-[12px] leading-6 text-ink">
               <code>{SOURCE_COMMAND}</code>

@@ -6,14 +6,19 @@ use am_core::AppCore;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager};
 
-/// Apps opened from Finder or the Dock get a minimal PATH, which hides
-/// Homebrew and npm-installed CLIs (and the `node` they run on). Adopt the
+/// Apps opened from a desktop launcher get a minimal PATH, which hides
+/// user-installed CLIs (and the `node` they run on). Adopt the
 /// PATH of the user's login shell, bounded by a short timeout.
 #[cfg(unix)]
 fn inherit_login_shell_path() {
     use std::io::Read;
     use std::time::{Duration, Instant};
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let default_shell = if cfg!(target_os = "macos") {
+        "/bin/zsh"
+    } else {
+        "/bin/bash"
+    };
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| default_shell.into());
     let Ok(mut child) = std::process::Command::new(shell)
         .args([
             "-ilc",

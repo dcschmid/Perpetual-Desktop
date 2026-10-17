@@ -65,9 +65,10 @@ export function parseRelease(value: unknown): Release | null {
   if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(tag)) return null;
   const windows = selectAsset(release.assets, /x64-setup\.exe$/i, tag);
   const mac = selectAsset(release.assets, /universal\.dmg$/i, tag);
+  const linux = selectAsset(release.assets, /_amd64\.AppImage$/i, tag);
   const checksums = selectAsset(release.assets, /^SHA256SUMS\.txt$/, tag);
-  if (!windows || !mac || !checksums) return null;
-  return { url: release.html_url, checksums, downloads: { windows, mac } };
+  if (!windows || !mac || !linux || !checksums) return null;
+  return { url: release.html_url, checksums, downloads: { windows, mac, linux } };
 }
 
 let releasePromise: Promise<Release | null> | null = null;

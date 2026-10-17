@@ -1,6 +1,6 @@
 import { PLATFORM_NAME } from '../lib/site';
 import { useDownloadFlow } from './DownloadFlow';
-import { AppleLogo, WindowsLogo } from './Mark';
+import { AppleLogo, WindowsLogo, TerminalLogo } from './Mark';
 
 type Props = {
   size?: 'sm' | 'lg';
@@ -23,6 +23,7 @@ export function DownloadButton({ size = 'lg', className = '' }: Props) {
     >
       {platform === 'windows' && <WindowsLogo size={small ? 12 : 15} />}
       {platform === 'mac' && <AppleLogo size={small ? 13 : 16} />}
+      {platform === 'linux' && <TerminalLogo size={small ? 13 : 16} />}
       {small || platform === 'other' ? 'Download' : `Download for ${PLATFORM_NAME[platform]}`}
     </button>
   );

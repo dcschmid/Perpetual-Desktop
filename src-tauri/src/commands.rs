@@ -138,10 +138,10 @@ fn launch_terminal(
         .map_err(|error| error.to_string())
 }
 
-/// Opens Terminal with a one-shot script. The script lives in a private
+/// Opens a terminal with a one-shot script. The script lives in a private
 /// temporary folder, is readable only by the user, and deletes itself as soon
 /// as it starts, because it can carry an account's environment.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn launch_terminal(
     launch: am_proto::ProviderAccountAuthLaunch,
     tooling: bool,
@@ -192,18 +192,47 @@ fn launch_terminal(
     file.write_all(script.as_bytes())
         .map_err(|error| error.to_string())?;
     drop(file);
-    std::process::Command::new("open")
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open")
         .args(["-a", "Terminal"])
         .arg(&path)
         .spawn()
         .map(|_| ())
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string());
+    #[cfg(target_os = "linux")]
+    let result = open_linux_terminal(&path);
+    if result.is_err() {
+        let _ = std::fs::remove_file(&path);
+    }
+    result
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
+fn open_linux_terminal(script: &std::path::Path) -> Result<(), String> {
+    for (terminal, separator) in [
+        ("x-terminal-emulator", "-e"),
+        ("gnome-terminal", "--"),
+        ("konsole", "-e"),
+        ("xfce4-terminal", "-x"),
+        ("xterm", "-e"),
+    ] {
+        match std::process::Command::new(terminal)
+            .args([separator, "bash"])
+            .arg(script)
+            .spawn()
+        {
+            Ok(_) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(format!("Cannot open {terminal}: {error}")),
+        }
+    }
+    Err("Install a terminal emulator (GNOME Terminal, Konsole, Xfce Terminal, or xterm) for interactive sign-in. Claude setup tokens can also be added in Accounts.".into())
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 fn launch_terminal(
     _launch: am_proto::ProviderAccountAuthLaunch,
     _tooling: bool,
 ) -> Result<(), String> {
-    Err("Interactive sign-in is available on Windows and macOS. Claude setup tokens can be added in Accounts.".into())
+    Err("Interactive sign-in is available on Windows, macOS, and Linux. Claude setup tokens can be added in Accounts.".into())
 }

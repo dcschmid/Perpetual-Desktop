@@ -10,10 +10,10 @@
    git push origin v0.1.0
    ```
 
-3. The **Release** workflow builds the Windows installer and a universal macOS app, signs them (when signing is configured), checks the signatures, writes `SHA256SUMS.txt`, records a build provenance attestation, and opens a **draft** GitHub release.
-4. Download the installer from the draft, install it on a clean Windows account, and run through the checklist below. Then publish the draft.
+3. The **Release** workflow builds the Windows installer, a universal macOS app, and Linux x86_64 `.deb` and `.AppImage` packages. It signs Windows/macOS builds when configured, checks their signatures, writes `SHA256SUMS.txt` for all packages, records build provenance attestations, and opens a **draft** GitHub release.
+4. Download the packages from the draft, install them on clean accounts on each supported platform, and run through the checklist below. Then publish the draft.
 
-The Check workflow also uploads Windows and universal macOS installers for each tested commit, including `dev`, so you can test a candidate before tagging.
+The Check workflow also uploads Windows, universal macOS, and Linux x86_64 packages for each tested commit, including `dev`, so you can test a candidate before tagging. Linux packages are built on Ubuntu 22.04 and require Ubuntu 22.04 / Debian 12 or newer, or a comparable glibc-based distribution. ARM64 Linux can be built from source but is not packaged by CI.
 
 To rebuild an unpublished draft, run the Release workflow manually and enter its tag. This updates the draft assets and matching checksums. Published releases are immutable: use a new version instead. Publishing a release triggers the Site workflow; the installer UI and release parsing code are retained, but the landing page currently directs users to source setup. Restore the installer flow and unsigned-download notice only when downloads are ready to be offered again.
 
@@ -61,12 +61,17 @@ What the app already avoids, so it doesn't look like malware:
 
 ## Release checklist
 
+For native smoke tests on a headless Xvfb display, use `LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1`. Check that the window renders content; a window title alone can hide a blank webview. Use temporary `PERPETUAL_DATA_DIR` and `XDG_CACHE_HOME` folders, and set `APPIMAGE_EXTRACT_AND_RUN=1` to test the AppImage without FUSE.
+
 - [ ] The Windows installer runs without administrator rights, and the Start menu shortcut launches the app.
 - [ ] On macOS, the app opens from Applications after the unsigned-app override, and its window controls sit in the title bar.
+- [ ] On Linux, `sudo apt install ./Perpetual_*_amd64.deb` installs the package and dependencies, and the desktop launcher opens the app.
+- [ ] The Linux AppImage opens after `chmod +x`; also test `--appimage-extract-and-run` without FUSE. Check both X11 and Wayland sessions.
+- [ ] On Linux, interactive CLI sign-in opens an installed terminal emulator, browser sign-in opens the browser, and sleep/wake leaves tasks resumable.
 - [ ] On first launch, a signed-in Codex or Claude CLI appears in Accounts with its email.
 - [ ] Browser sign-in for Codex and Claude opens the browser without a terminal window, then the account becomes signed in.
 - [ ] A task runs on Codex and on Claude, and the reply streams in.
 - [ ] Choosing **Use** on another account moves the active account, and the next message uses it.
 - [ ] Changes from a task with a project appear in **Changes** and apply to the project.
 - [ ] Light, dark, and system themes all read well. The window restores its last size and position.
-- [ ] Uninstalling from **Settings → Apps** (Windows) or moving the app to the Trash (macOS) removes it.
+- [ ] Uninstalling from **Settings → Apps** (Windows), moving the app to the Trash (macOS), or using `sudo apt remove perpetual` / deleting the AppImage (Linux) removes it.

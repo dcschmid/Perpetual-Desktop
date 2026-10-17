@@ -160,8 +160,42 @@ jobs:
           path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.96.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev libssl-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev curl wget file patchelf libfuse2 dbus xdg-utils
+      - run: npm ci
+      - run: npm run doctor
+      - run: npm test
+      - run: cargo test -p am-core --lib --locked
+      - name: Build Linux packages
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: npx tauri build --ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
   publish:
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -185,6 +219,8 @@ jobs:
           subject-path: |
             dist/*.exe
             dist/*.dmg
+            dist/*.deb
+            dist/*.AppImage
 
       - name: Draft the GitHub release
         env:
@@ -197,6 +233,7 @@ jobs:
             echo
             echo "- **Windows:** run the \`.exe\` installer. It installs for your account only and doesn't need administrator rights."
             echo "- **macOS:** open the \`.dmg\` and drag Perpetual to Applications."
+            echo "- **Linux x86_64:** on Debian/Ubuntu/Mint run \`sudo apt install ./Perpetual_*_amd64.deb\`. For other distributions, make the \`.AppImage\` executable with \`chmod +x Perpetual_*.AppImage\` and run it. Requires Ubuntu 22.04 / Debian 12 or newer, or a comparable glibc-based distribution. AppImage may need FUSE 2; alternatively run with \`--appimage-extract-and-run\`."
             echo
             echo "Perpetual needs the [Codex CLI](https://developers.openai.com/codex/cli) and/or [Claude Code](https://docs.anthropic.com/en/docs/claude-code/setup)."
             echo
@@ -206,7 +243,7 @@ jobs:
             cat dist/SHA256SUMS.txt
             echo '```'
             echo
-            echo "Windows: \`Get-FileHash <file> -Algorithm SHA256\`. macOS: \`shasum -a 256 <file>\`."
+            echo "Windows: \`Get-FileHash <file> -Algorithm SHA256\`. macOS: \`shasum -a 256 <file>\`. Linux: \`sha256sum <file>\`."
             echo "To confirm a file was built from this repository: \`gh attestation verify <file> --repo $GITHUB_REPOSITORY\`."
             if [ "$WINDOWS_SIGNED" != "true" ] || [ "$MACOS_SIGNED" != "true" ]; then
               echo
@@ -220,10 +257,10 @@ jobs:
               echo "::error::This tag is already published. Use a new version; published binaries and checksums are immutable."
               exit 1
             fi
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*.exe dist/*.dmg dist/SHA256SUMS.txt
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*.exe dist/*.dmg dist/*.deb dist/*.AppImage dist/SHA256SUMS.txt
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
               --title "Perpetual ${TAG#v}" --notes-file notes.md --generate-notes \
-              dist/*.exe dist/*.dmg dist/SHA256SUMS.txt
+              dist/*.exe dist/*.dmg dist/*.deb dist/*.AppImage dist/SHA256SUMS.txt
           fi

@@ -11,6 +11,21 @@ export function supportedNode(version) {
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const windows = process.platform === 'win32';
+const linuxPackages = [
+  'build-essential',
+  'pkg-config',
+  'libwebkit2gtk-4.1-dev',
+  'libssl-dev',
+  'libxdo-dev',
+  'libayatana-appindicator3-dev',
+  'librsvg2-dev',
+  'curl',
+  'wget',
+  'file',
+  'patchelf',
+  'dbus',
+  'xdg-utils',
+];
 function probe(command, args = []) {
   return spawnSync(command, args, {
     cwd: root,
@@ -75,7 +90,7 @@ async function installRustup() {
   try {
     const target = windows
       ? `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-pc-windows-msvc`
-      : `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
+      : `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-${process.platform === 'linux' ? 'unknown-linux-gnu' : 'apple-darwin'}`;
     const installer = path.join(directory, windows ? 'rustup-init.exe' : 'rustup-init');
     const response = await fetch(
       `https://static.rust-lang.org/rustup/dist/${target}/rustup-init${windows ? '.exe' : ''}`,
@@ -88,11 +103,35 @@ async function installRustup() {
   }
 }
 
+async function linuxBuildTools(check) {
+  if (
+    probe('cc', ['--version']).status === 0 &&
+    probe('pkg-config', ['--exists', 'gtk+-3.0', 'webkit2gtk-4.1', 'openssl', 'librsvg-2.0'])
+      .status === 0
+  )
+    return;
+  const instructions = `Linux build dependencies are missing. On Debian/Ubuntu/Mint run: sudo apt-get install ${linuxPackages.join(' ')}. Other distributions: https://v2.tauri.app/start/prerequisites/#linux`;
+  if (check || probe('apt-get', ['--version']).status !== 0) throw new Error(instructions);
+  console.log('Installing Linux build dependencies. sudo may ask for your password.');
+  const command = process.getuid() === 0 ? 'apt-get' : 'sudo';
+  const prefix = command === 'sudo' ? ['apt-get'] : [];
+  await run(command, [...prefix, 'update']);
+  await run(command, [...prefix, 'install', '-y', ...linuxPackages]);
+  if (
+    probe('cc', ['--version']).status !== 0 ||
+    probe('pkg-config', ['--exists', 'gtk+-3.0', 'webkit2gtk-4.1', 'openssl', 'librsvg-2.0'])
+      .status !== 0
+  )
+    throw new Error(instructions);
+}
+
 export async function setup({ check = false, launch = false } = {}) {
   if (!supportedNode(process.version))
     throw new Error('Install Node.js 22.13+ (22.x), 24.x, or 26+: https://nodejs.org/');
-  if (!['win32', 'darwin'].includes(process.platform))
-    throw new Error('The desktop app supports Windows and macOS.');
+  if (!['win32', 'darwin', 'linux'].includes(process.platform))
+    throw new Error('The desktop app supports Windows, macOS, and Linux.');
+  if (process.platform === 'linux' && !['x64', 'arm64'].includes(process.arch))
+    throw new Error('Linux source builds require an x86_64 or ARM64 system.');
   if (probe('git', ['--version']).status !== 0)
     throw new Error('Install Git: https://git-scm.com/downloads');
 
@@ -112,7 +151,7 @@ export async function setup({ check = false, launch = false } = {}) {
       throw new Error(
         'Finish installing Desktop development with C++ and a Windows SDK, restart if prompted, then run npm start again.',
       );
-  } else if (!windows && probe('xcode-select', ['-p']).status !== 0) {
+  } else if (process.platform === 'darwin' && probe('xcode-select', ['-p']).status !== 0) {
     if (check) throw new Error('Apple command-line tools are missing. Run npm run setup.');
     console.log('Accept the Apple command-line tools installation. Waiting for it to finish…');
     const result = probe('xcode-select', ['--install']);
@@ -127,6 +166,7 @@ export async function setup({ check = false, launch = false } = {}) {
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
+  if (process.platform === 'linux') await linuxBuildTools(check);
   if (windows) {
     const webview = probe('powershell.exe', [
       '-NoProfile',

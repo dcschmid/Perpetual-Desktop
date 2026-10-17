@@ -3,12 +3,13 @@ import { useRef } from 'react';
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from 'motion/react';
 import { REPO } from '../lib/site';
 import { useDownloadFlow } from './DownloadFlow';
-import { AppleLogo, WindowsLogo } from './Mark';
+import { AppleLogo, WindowsLogo, TerminalLogo } from './Mark';
 import { Reveal } from './Reveal';
 
 const PLATFORMS = [
   { id: 'windows', label: 'Windows', note: 'Source', Logo: WindowsLogo },
   { id: 'mac', label: 'macOS', note: 'Source', Logo: AppleLogo },
+  { id: 'linux', label: 'Linux', note: 'Source', Logo: TerminalLogo },
 ] as const;
 
 export function Download() {
@@ -65,12 +66,15 @@ export function Download() {
           <span className="headline-gradient">Keep your agents working.</span>
         </h2>
         <p className="mx-auto mt-5 max-w-md text-[17px] leading-7 text-muted">
-          Free for Windows and macOS. Works with the Codex CLI and Claude Code you already use.
+          Free for Windows, macOS, and Linux. Works with the Codex CLI and Claude Code you already
+          use.
         </p>
       </Reveal>
 
       <DownloadActions />
-      <div className="mt-6 flex justify-center"><ExtensionButton /></div>
+      <div className="mt-6 flex justify-center">
+        <ExtensionButton />
+      </div>
     </section>
   );
 }
