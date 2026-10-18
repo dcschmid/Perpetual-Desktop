@@ -36,7 +36,20 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type PermissionPolicy = 'read_only' | 'workspace_write' | 'autonomous';
 export type ExecutionBackend = 'host' | 'docker_sandbox';
 export type AvailabilityState = 'unknown' | 'available' | 'limited';
-export type LocalModelProvider = 'ollama' | 'lm_studio';
+export type LocalModelProvider = 'ollama' | 'lm_studio' | 'openai_compatible';
+
+export interface OpenAiEndpoint {
+  id: string;
+  label: string;
+  base_url: string;
+  models: string[];
+  enabled: boolean;
+  api_key_configured: boolean;
+}
+
+export interface OpenAiEndpointProbe {
+  models: string[];
+}
 export type TaskBudget =
   | { mode: 'unlimited' }
   | { mode: 'tokens'; limit_tokens: number }

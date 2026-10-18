@@ -118,13 +118,21 @@ impl AppCore {
         run_local_cli("lms", &["import", path.as_str()]).await
     }
 
-    pub(crate) fn local_model_runtime(
+    pub(crate) async fn local_model_runtime(
         &self,
         provider: Option<LocalModelProviderKind>,
         model: Option<String>,
         base_url: Option<String>,
     ) -> Result<Option<LocalModelRuntime>, CoreError> {
         let Some(provider) = provider else {
+            if model
+                .as_deref()
+                .is_some_and(|m| m.starts_with("perpetual-endpoint/"))
+            {
+                return Err(CoreError::Other(
+                    "Choose the endpoint model again before starting this task".into(),
+                ));
+            }
             return Ok(None);
         };
         let model = model
@@ -132,9 +140,16 @@ impl AppCore {
             .map(str::trim)
             .filter(|model| !model.is_empty())
             .ok_or_else(|| CoreError::Other("local model target requires a model".into()))?;
+        if provider == LocalModelProviderKind::OpenAiCompatible {
+            return self
+                .openai_endpoint_runtime(model, base_url.as_deref())
+                .await
+                .map(Some);
+        }
         let api_token = match provider {
             LocalModelProviderKind::LmStudio => load_lm_studio_token()?,
             LocalModelProviderKind::Ollama => None,
+            LocalModelProviderKind::OpenAiCompatible => unreachable!(),
         };
         Ok(Some(LocalModelRuntime {
             provider,
@@ -159,15 +174,24 @@ pub(crate) fn run_target_hash(
     model_target: ModelTargetKind,
     compute_lease_id: Option<&str>,
 ) -> String {
+    // Gateway model IDs and URL paths can be case-sensitive. A different
+    // destination must start a new provider session rather than resume the old one.
+    let endpoint_identity = |value: Option<&str>| {
+        if local_provider == Some(LocalModelProviderKind::OpenAiCompatible) {
+            value.unwrap_or_default().trim().to_string()
+        } else {
+            clean_identity_part(value)
+        }
+    };
     let identity = format!(
         "agent={}|model={}|reasoning={}|local_provider={}|local_base_url={}|backend={}|model_target={}|compute_lease_id={}",
         agent.as_str(),
-        clean_identity_part(model),
+        endpoint_identity(model),
         clean_identity_part(reasoning),
         local_provider
             .map(|provider| provider.as_str())
             .unwrap_or("cloud"),
-        clean_identity_part(local_base_url),
+        endpoint_identity(local_base_url),
         execution_backend.as_str(),
         model_target.as_str(),
         clean_identity_part(compute_lease_id),
@@ -540,6 +564,10 @@ fn normalize_policy(mut policy: LocalModelPolicy) -> LocalModelPolicy {
 }
 
 fn normalize_target(target: LocalModelTarget) -> Option<LocalModelTarget> {
+    // Gateways must be chosen explicitly, never sent work by offline recovery.
+    if target.provider == LocalModelProviderKind::OpenAiCompatible {
+        return None;
+    }
     let model = target.model.trim();
     if model.is_empty() {
         return None;
@@ -849,6 +877,36 @@ mod tests {
         );
 
         assert_eq!(left, right);
+    }
+
+    #[test]
+    fn gateway_targets_preserve_case_and_never_join_offline_fallback() {
+        let hash = |model, url| {
+            run_target_hash(
+                AgentKind::Codex,
+                Some(model),
+                None,
+                Some(LocalModelProviderKind::OpenAiCompatible),
+                Some(url),
+                ExecutionBackend::Host,
+                ModelTargetKind::LocalProvider,
+                None,
+            )
+        };
+        assert_ne!(
+            hash("perpetual-endpoint/a/Model", "https://example.test/Route"),
+            hash("perpetual-endpoint/a/model", "https://example.test/Route")
+        );
+        assert_ne!(
+            hash("perpetual-endpoint/a/Model", "https://example.test/Route"),
+            hash("perpetual-endpoint/a/Model", "https://example.test/route")
+        );
+        assert!(normalize_target(LocalModelTarget {
+            provider: LocalModelProviderKind::OpenAiCompatible,
+            model: "yolo-auto".into(),
+            base_url: Some("https://example.test/v1".into())
+        })
+        .is_none());
     }
 
     #[test]

@@ -246,9 +246,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const detect = useCallback(
-    (forceModels = true) => {
+    function detect(forceModels = true): Promise<void> {
       if (!native) return Promise.resolve();
-      if (detectionFlight.current) return detectionFlight.current;
+      // A settings mutation can race an older catalog request. A forced
+      // refresh must observe the saved endpoint state after that request ends.
+      if (detectionFlight.current)
+        return forceModels
+          ? detectionFlight.current.then(() => detect(true))
+          : detectionFlight.current;
       const run = async () => {
         const id = ++detectionId.current;
         const [agents, models] = await Promise.all([
@@ -279,7 +284,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   ...incoming,
                   models: [
                     ...incoming.models,
-                    ...previous.models.filter((model) => !ids.has(model.id)),
+                    ...previous.models.filter(
+                      (model) => !ids.has(model.id) && model.source !== 'openai_compatible',
+                    ),
                   ],
                 };
               })

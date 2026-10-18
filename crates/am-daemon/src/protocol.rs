@@ -57,6 +57,29 @@ pub struct RpcRequest {
     pub request: DaemonRequest,
 }
 
+/// A credential transported over authenticated RPC, never exposed by Debug.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct EndpointApiKey(String);
+
+impl EndpointApiKey {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for EndpointApiKey {
+    fn from(key: String) -> Self {
+        Self(key)
+    }
+}
+
+impl std::fmt::Debug for EndpointApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[REDACTED]")
+    }
+}
+
 /// Everything a client can ask the daemon to do. Mirrors `am-core`'s service
 /// surface so a UI can drive the core entirely over the socket.
 ///
@@ -178,6 +201,18 @@ pub enum DaemonRequest {
     DetectLocalModels,
     GetLocalModelPolicy,
     SetLocalModelPolicy(LocalModelPolicy),
+    GetOpenaiEndpoints,
+    SaveOpenaiEndpoint(am_proto::OpenAiEndpoint),
+    DeleteOpenaiEndpoint {
+        id: String,
+    },
+    SetOpenaiEndpointKey {
+        id: String,
+        key: EndpointApiKey,
+    },
+    ProbeOpenaiEndpoint {
+        id: String,
+    },
     GetLimitPolicy,
     SetLimitPolicy(LimitPolicy),
     ProviderAccountStatuses,
@@ -456,6 +491,9 @@ pub enum DaemonResponse {
     AgentModelCatalogs(Vec<AgentModelCatalog>),
     LocalModelStatuses(Vec<LocalModelStatus>),
     LocalModelPolicy(LocalModelPolicy),
+    OpenaiEndpoints(Vec<am_proto::OpenAiEndpoint>),
+    OpenaiEndpoint(am_proto::OpenAiEndpoint),
+    OpenaiEndpointProbe(am_proto::OpenAiEndpointProbe),
     LimitPolicy(LimitPolicy),
     ProviderAccountStatuses(Vec<ProviderAccountStatus>),
     ProviderAccountId(String),
@@ -637,6 +675,24 @@ mod tests {
         let back = roundtrip(&req);
         assert_eq!(back.id, 42);
         assert!(matches!(back.request, DaemonRequest::Search { .. }));
+    }
+
+    #[test]
+    fn endpoint_key_roundtrips_without_exposing_credentials_in_debug() {
+        let wire = serde_json::json!({
+            "id": 43,
+            "request": {"set_openai_endpoint_key": {"id": "gateway", "key": "test-only-secret"}}
+        });
+        let request: RpcRequest = serde_json::from_value(wire.clone()).unwrap();
+        assert!(!format!("{request:?}").contains("test-only-secret"));
+        assert!(format!("{request:?}").contains("[REDACTED]"));
+        assert_eq!(serde_json::to_value(&request).unwrap(), wire);
+        match roundtrip(&request).request {
+            DaemonRequest::SetOpenaiEndpointKey { key, .. } => {
+                assert_eq!(key.as_str(), "test-only-secret");
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 
     #[test]

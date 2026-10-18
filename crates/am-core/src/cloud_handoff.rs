@@ -176,6 +176,16 @@ impl AppCore {
         let mut thread = am_db::repos::agent_thread::get(&self.db.pool, thread_id)
             .await?
             .ok_or(CoreError::NotFound)?;
+        if thread.local_provider == Some(am_proto::LocalModelProviderKind::OpenAiCompatible)
+            || thread
+                .model
+                .as_deref()
+                .is_some_and(|model| model.starts_with("perpetual-endpoint/"))
+        {
+            return Err(CoreError::Other(
+                "OpenAI-compatible endpoint tasks require Host execution; choose another model before cloud handoff".into(),
+            ));
+        }
         if am_db::repos::cloud_run::active_for_thread(&self.db.pool, thread_id)
             .await?
             .is_some()

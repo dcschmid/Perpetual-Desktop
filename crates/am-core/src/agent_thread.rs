@@ -508,6 +508,13 @@ impl AppCore {
             .await?;
         let agent = policy.agent;
         let backend = policy.runtime;
+        if thread.local_provider == Some(am_proto::LocalModelProviderKind::OpenAiCompatible)
+            && backend != ExecutionBackend::Host
+        {
+            return Err(CoreError::Other(
+                "OpenAI-compatible endpoints currently require Host execution".into(),
+            ));
+        }
         thread.model = policy.model.clone().or_else(|| thread.model.clone());
         thread.model_target = model_target;
         thread.task_budget.validate().map_err(CoreError::Other)?;
@@ -524,7 +531,8 @@ impl AppCore {
                 thread.local_provider,
                 thread.model.clone(),
                 thread.local_base_url.clone(),
-            )?
+            )
+            .await?
         };
         if local_model.is_some() && agent != AgentKind::Codex {
             return Err(CoreError::Other(
@@ -1640,6 +1648,9 @@ impl AppCore {
             .await
             .ok()
             .flatten();
+        let explicit_endpoint = usage_thread.as_ref().is_some_and(|thread| {
+            thread.local_provider == Some(am_proto::LocalModelProviderKind::OpenAiCompatible)
+        });
         let usage_project_id = usage_thread
             .as_ref()
             .and_then(|thread| thread.project_id.clone());
@@ -1824,6 +1835,10 @@ impl AppCore {
                     reset_at,
                     final_sample,
                 } => {
+                    // Gateway quotas do not describe the user's OpenAI account.
+                    if explicit_endpoint {
+                        continue;
+                    }
                     if *window == QuotaWindowKind::Weekly && *final_sample {
                         saw_final_weekly_telemetry = true;
                     }
@@ -1908,20 +1923,22 @@ impl AppCore {
                                 .mark_provider_account_limited(account_id, *reset_at)
                                 .await;
                         }
-                    } else {
+                    } else if !explicit_endpoint {
                         let _ = self.mark_agent_limited(agent, *reset_at).await;
                     }
                     if let Ok(Some(mut thread)) =
                         am_db::repos::agent_thread::get(&self.db.pool, &thread_id).await
                     {
                         let percentage_budget = crate::budget::is_percentage_budget(&usage_budget);
-                        thread.status = if percentage_budget {
+                        thread.status = if percentage_budget || explicit_endpoint {
                             TaskStatus::Paused
                         } else {
                             TaskStatus::WaitingForLimit
                         };
                         thread.limit_reset_at = *reset_at;
-                        thread.handoff_state = if percentage_budget {
+                        thread.handoff_state = if explicit_endpoint {
+                            "endpoint_limit".to_string()
+                        } else if percentage_budget {
                             "budget_paused_provider_limit".to_string()
                         } else {
                             "waiting_for_fallback".to_string()
@@ -1950,8 +1967,17 @@ impl AppCore {
                     if let Ok(Some(mut thread)) =
                         am_db::repos::agent_thread::get(&self.db.pool, &thread_id).await
                     {
-                        thread.status = TaskStatus::WaitingForNetwork;
-                        thread.handoff_state = "waiting_for_network".to_string();
+                        thread.status = if explicit_endpoint {
+                            TaskStatus::Paused
+                        } else {
+                            TaskStatus::WaitingForNetwork
+                        };
+                        thread.handoff_state = if explicit_endpoint {
+                            "endpoint_unavailable"
+                        } else {
+                            "waiting_for_network"
+                        }
+                        .to_string();
                         if let Ok(saved) =
                             am_db::repos::agent_thread::save(&self.db.pool, &thread).await
                         {
@@ -1990,7 +2016,10 @@ impl AppCore {
                         state,
                     )
                     .await;
-                    if effective_status == SessionStatus::Completed && !saw_usage_limit {
+                    if effective_status == SessionStatus::Completed
+                        && !saw_usage_limit
+                        && !explicit_endpoint
+                    {
                         let _ = self.mark_agent_available(agent).await;
                     }
 
@@ -2008,6 +2037,8 @@ impl AppCore {
                                     || budget_state_invalid
                                     || budget_accounting_failed))
                         {
+                            TaskStatus::Paused
+                        } else if explicit_endpoint && (saw_network_loss || saw_usage_limit) {
                             TaskStatus::Paused
                         } else if saw_network_loss {
                             TaskStatus::WaitingForNetwork
@@ -2139,6 +2170,11 @@ impl AppCore {
             return;
         }
 
+        // A selected gateway never silently switches to a cloud account or
+        // offline provider when it is limited or unavailable. The user can retry.
+        if explicit_endpoint && (saw_network_loss || saw_usage_limit) {
+            return;
+        }
         if saw_network_loss {
             self.handle_thread_network_loss(&thread_id, agent).await;
             return;
@@ -4371,6 +4407,114 @@ mod tests {
             snapshots.len(),
             started.elapsed()
         );
+    }
+
+    #[tokio::test]
+    async fn gateway_limits_and_network_failures_pause_without_changing_openai_account_state() {
+        for event in [
+            NormalizedEvent::UsageLimitReached { reset_at: None },
+            NormalizedEvent::NetworkUnavailable {
+                message: "Gateway offline".into(),
+            },
+            NormalizedEvent::AssistantText {
+                text: "Gateway completed".into(),
+            },
+        ] {
+            let failed = !matches!(event, NormalizedEvent::AssistantText { .. });
+            let core = crate::test_core().await;
+            let reset = am_proto::now() + chrono::Duration::hours(1);
+            core.mark_agent_limited(AgentKind::Codex, Some(reset))
+                .await
+                .unwrap();
+            let thread = core
+                .create_agent_thread(NewAgentThread {
+                    title: "Gateway isolation".into(),
+                    preferred_agent: Some(AgentKind::Codex),
+                    model: Some("perpetual-endpoint/test/yolo-auto".into()),
+                    local_provider: Some(am_proto::LocalModelProviderKind::OpenAiCompatible),
+                    local_base_url: Some("http://127.0.0.1:1/v1".into()),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+            let turn = am_db::repos::agent_turn::create(
+                &core.db.pool,
+                &thread.id,
+                AgentKind::Codex,
+                "read_only",
+                ExecutionBackend::Host,
+                None,
+                thread.model.as_deref(),
+                None,
+                thread.local_provider,
+                thread.local_base_url.as_deref(),
+                ModelTargetKind::LocalProvider,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+            let (tx, rx) = tokio::sync::mpsc::channel(8);
+            tx.send(NormalizedEvent::QuotaWindow {
+                window: QuotaWindowKind::Weekly,
+                used_percent: 100.0,
+                reset_at: None,
+                final_sample: true,
+            })
+            .await
+            .unwrap();
+            tx.send(event).await.unwrap();
+            tx.send(NormalizedEvent::SessionEnded {
+                status: if failed {
+                    SessionStatus::Failed
+                } else {
+                    SessionStatus::Completed
+                },
+            })
+            .await
+            .unwrap();
+            let permit = core.sessions.try_acquire(None).unwrap();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                core.consume_agent_thread_turn(
+                    turn.id,
+                    thread.id.clone(),
+                    AgentKind::Codex,
+                    rx,
+                    permit,
+                    None,
+                    None,
+                    None,
+                ),
+            )
+            .await
+            .unwrap();
+            let account = am_db::repos::agent::get(&core.db.pool, AgentKind::Codex)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(account.availability, am_proto::AvailabilityState::Limited);
+            assert_eq!(account.reset_at, Some(reset));
+            assert!(core.provider_usage.lock().unwrap().is_empty());
+            let saved = am_db::repos::agent_thread::get(&core.db.pool, &thread.id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                saved.status,
+                if failed {
+                    TaskStatus::Paused
+                } else {
+                    TaskStatus::Review
+                }
+            );
+            assert_eq!(saved.model, thread.model);
+            assert_eq!(saved.local_provider, thread.local_provider);
+        }
     }
     #[test]
     fn failed_provider_turn_does_not_become_a_new_user_task() {

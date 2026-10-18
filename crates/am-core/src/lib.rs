@@ -51,6 +51,7 @@ mod github;
 mod layout;
 mod local_models;
 mod network;
+mod openai_endpoints;
 mod orchestrate;
 mod policy;
 mod provider_accounts;
