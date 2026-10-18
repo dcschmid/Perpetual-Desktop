@@ -124,6 +124,26 @@ it('preserves a saved key when editing with an empty password field', async () =
   expect(endpoints[0].api_key_configured).toBe(true);
 });
 
+it('saves Chat Completions for YOLO Auto and preserves the saved key when changing protocol', async () => {
+  await render();
+  await click('Edit My gateway');
+  const select = document.querySelector<HTMLSelectElement>('select')!;
+  expect(select.value).toBe('responses');
+  await act(async () => {
+    select.value = 'chat_completions';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(document.body.textContent).toContain('https://yolo-auto.com/v1');
+  await submit();
+  expect(endpoints[0].api).toBe('chat_completions');
+  expect(endpoints[0].api_key_configured).toBe(true);
+  expect(vi.mocked(rpc).mock.calls.some(([name]) => name === 'set_openai_endpoint_key')).toBe(
+    false,
+  );
+  await click('Edit My gateway');
+  expect(document.querySelector<HTMLSelectElement>('select')!.value).toBe('chat_completions');
+});
+
 it('discovers models, accepts manual aliases, and refreshes saved metadata when closing', async () => {
   await render();
   await click('Edit My gateway');

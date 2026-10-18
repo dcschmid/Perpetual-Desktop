@@ -51,7 +51,7 @@ export function EndpointSettings() {
     <div className="space-y-7">
       <Section
         title="OpenAI-compatible endpoints"
-        description="Use your own gateway with Codex on Host execution. Endpoints must support the Responses API and tool calls. API keys stay in the system credential store."
+        description="Use your own gateway with Codex on Host execution. Choose Responses or Chat Completions with tool calls. API keys stay in the system credential store."
         actions={
           <Button
             size="sm"
@@ -62,6 +62,7 @@ export function EndpointSettings() {
                 id: crypto.randomUUID(),
                 label: '',
                 base_url: '',
+                api: 'responses',
                 models: [],
                 enabled: true,
                 api_key_configured: false,
@@ -97,6 +98,7 @@ export function EndpointSettings() {
                       : 'Add a model ID to use this endpoint.'}
                   </p>
                   <p className="mt-1 text-xs text-muted">
+                    {endpoint.api === 'chat_completions' ? 'Chat Completions · ' : 'Responses · '}
                     {endpoint.api_key_configured ? 'API key saved' : 'No API key saved'}
                   </p>
                 </div>
@@ -132,7 +134,7 @@ export function EndpointSettings() {
         </div>
         <p className="mt-4 text-xs leading-5 text-muted">
           Enabled models appear in the Codex model menu. Enter exact model IDs or routing aliases
-          such as yolo-auto. These endpoints are used only when you select them.
+          such as yolo. These endpoints are used only when you select them.
         </p>
       </Section>
       {editing && (
@@ -195,6 +197,7 @@ function EndpointForm({
 }) {
   const [label, setLabel] = useState(endpoint.label);
   const [baseUrl, setBaseUrl] = useState(endpoint.base_url);
+  const [api, setApi] = useState<NonNullable<OpenAiEndpoint['api']>>(endpoint.api ?? 'responses');
   const [models, setModels] = useState(endpoint.models.join('\n'));
   const [apiKey, setApiKey] = useState('');
   const [clearKey, setClearKey] = useState(false);
@@ -210,6 +213,7 @@ function EndpointForm({
       ...endpoint,
       label,
       base_url: baseUrl,
+      api,
       models: models
         .split('\n')
         .map((m) => m.trim())
@@ -286,6 +290,25 @@ function EndpointForm({
           />
         </label>
         <label className="block space-y-1.5 text-xs text-muted">
+          API protocol
+          <select
+            aria-label="API protocol"
+            className={field}
+            value={api}
+            onChange={(e) => setApi(e.target.value as NonNullable<OpenAiEndpoint['api']>)}
+            disabled={busy}
+          >
+            <option value="responses">Responses</option>
+            <option value="chat_completions">Chat Completions (YOLO Auto, etc.)</option>
+          </select>
+        </label>
+        {api === 'chat_completions' && (
+          <p className="text-xs leading-5 text-muted">
+            Requires streaming and tool calls. For YOLO Auto use https://yolo-auto.com/v1 and a
+            model ID such as yolo or qwen3.8-27b. Hosted web search is unavailable in this mode.
+          </p>
+        )}
+        <label className="block space-y-1.5 text-xs text-muted">
           API key (optional)
           <input
             type="password"
@@ -327,7 +350,7 @@ function EndpointForm({
             className={field}
             value={models}
             onChange={(e) => setModels(e.target.value)}
-            placeholder={'yolo-auto\nvendor/model-name'}
+            placeholder={'yolo\nvendor/model-name'}
             disabled={busy}
           />
         </label>

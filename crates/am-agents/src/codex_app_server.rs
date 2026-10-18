@@ -42,10 +42,15 @@ type PendingResponses = Arc<Mutex<ResponseState>>;
 
 /// Launch (or resume) a Codex Ask-mode run over the app-server transport.
 pub(crate) async fn launch(
-    spec: SessionSpec,
+    mut spec: SessionSpec,
     resume: Option<SessionRef>,
     approver: ApprovalResponder,
 ) -> Result<SessionHandle, AgentLaunchError> {
+    let bridge = crate::chat_completions::prepare(&mut spec)
+        .await
+        .map_err(|_| {
+            AgentLaunchError::other("Could not start Chat Completions endpoint adapter")
+        })?;
     let envs = crate::codex::session_env(&spec);
     let args = app_server_args(&spec);
     let mut child = spawn_host_piped_stdin(BIN, &args, &spec.worktree, &envs)
@@ -64,10 +69,14 @@ pub(crate) async fn launch(
     let (steer_tx, steer_rx) = mpsc::unbounded_channel::<String>();
 
     let limits = spec.runtime.limits();
-    tokio::spawn(drive(
-        child, stdin, stdout, stderr, spec, resume, approver, events_tx, cancel_rx, steer_rx,
-        limits,
-    ));
+    tokio::spawn(async move {
+        let _bridge = bridge;
+        drive(
+            child, stdin, stdout, stderr, spec, resume, approver, events_tx, cancel_rx, steer_rx,
+            limits,
+        )
+        .await;
+    });
 
     Ok(SessionHandle {
         events: events_rx,
@@ -1300,6 +1309,7 @@ mod tests {
                 model: Some("perpetual-endpoint/a/model".into()),
                 reasoning: None,
                 local_model: Some(crate::LocalModelRuntime {
+                    api: am_proto::EndpointApi::Responses,
                     provider: am_proto::LocalModelProviderKind::OpenAiCompatible,
                     model: model.into(),
                     base_url: Some("https://example.test/gateway/v1".into()),

@@ -2780,6 +2780,7 @@ impl AppCore {
         let target_model = target.model.clone();
         let target_base_url = target.base_url.clone();
         let runtime_probe = am_agents::LocalModelRuntime {
+            api: am_proto::EndpointApi::Responses,
             provider: target_provider,
             model: target_model.clone(),
             base_url: target_base_url.clone(),
@@ -4291,6 +4292,7 @@ mod tests {
     #[test]
     fn sandbox_preflight_detects_container_localhost_model_endpoints() {
         let local = am_agents::LocalModelRuntime {
+            api: am_proto::EndpointApi::Responses,
             provider: am_proto::LocalModelProviderKind::Ollama,
             model: "qwen2.5-coder".into(),
             base_url: Some("http://localhost:11434".into()),
