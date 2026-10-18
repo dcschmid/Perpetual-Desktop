@@ -140,8 +140,9 @@ pub(super) fn request(input: &Value) -> Result<(Value, Tools)> {
         add_tools(source, None, &mut tools, &mut chat_tools)?
     }
     let mut messages: Vec<Value> = vec![];
+    let mut system_instructions = vec![];
     if let Some(instructions) = input["instructions"].as_str().filter(|s| !s.is_empty()) {
-        messages.push(json!({"role":"system","content":instructions}));
+        system_instructions.push(instructions.to_owned());
     }
     let items = if let Some(text) = input["input"].as_str() {
         vec![json!({"role":"user","content":text})]
@@ -161,7 +162,23 @@ pub(super) fn request(input: &Value) -> Result<(Value, Tools)> {
                     "assistant" => "assistant",
                     _ => return Err("Endpoint message has an unsupported role"),
                 };
-                let mut message = json!({"role":role,"content":content(&item["content"])?});
+                let content = content(&item["content"])?;
+                if role == "system" {
+                    if let Some(text) = content.as_str() {
+                        system_instructions.push(text.to_owned());
+                    } else {
+                        for part in content.as_array().unwrap() {
+                            system_instructions.push(
+                                part["text"]
+                                    .as_str()
+                                    .ok_or("Endpoint system instructions must contain only text")?
+                                    .to_owned(),
+                            );
+                        }
+                    }
+                    continue;
+                }
+                let mut message = json!({"role":role,"content":content});
                 if role == "assistant" && !reasoning.is_empty() {
                     message["reasoning_content"] = std::mem::take(&mut reasoning).into()
                 }
@@ -213,6 +230,14 @@ pub(super) fn request(input: &Value) -> Result<(Value, Tools)> {
                 return Err("Chat Completions endpoint received a Responses-only conversation item")
             }
         }
+    }
+    // Codex can send several developer messages, including after user input.
+    // Chat templates such as Qwen's require one system message at the start.
+    if !system_instructions.is_empty() {
+        messages.insert(
+            0,
+            json!({"role":"system","content":system_instructions.join("\n\n")}),
+        );
     }
     let mut body = json!({"model":input["model"], "messages":messages, "stream":true, "stream_options":{"include_usage":true}});
     if !chat_tools.is_empty() {
@@ -529,6 +554,32 @@ mod tests {
         assert!(tools
             .values()
             .any(|t| t.namespace.as_deref() == Some("mcp__example__")));
+    }
+
+    #[test]
+    fn consolidates_all_system_and_developer_instructions_before_the_conversation() {
+        let input = json!({"model":"yolo","stream":true,"instructions":"Base instructions",
+        "input":[
+            {"role":"developer","content":[{"type":"input_text","text":"Permissions"}]},
+            {"role":"user","content":"First question"},
+            {"role":"assistant","content":[{"type":"output_text","text":"First answer"}]},
+            {"role":"system","content":"Updated instructions"},
+            {"role":"developer","content":[{"type":"input_text","text":"Project rules"},{"type":"input_text","text":"More rules"}]},
+            {"role":"user","content":"Follow-up question"}
+        ]});
+        let (body, _) = request(&input).unwrap();
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message["role"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["system", "user", "assistant", "user"]
+        );
+        assert_eq!(messages[0]["content"], "Base instructions\n\nPermissions\n\nUpdated instructions\n\nProject rules\n\nMore rules");
+        assert_eq!(messages[1]["content"], "First question");
+        assert_eq!(messages[2]["content"][0]["text"], "First answer");
+        assert_eq!(messages[3]["content"], "Follow-up question");
     }
 
     #[test]
