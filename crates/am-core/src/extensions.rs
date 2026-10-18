@@ -190,7 +190,7 @@ fn servers(agent: AgentKind, path: &Path, project: bool) -> Result<Vec<Server>, 
         .collect())
 }
 
-fn native_skill_overrides(path: &Path) -> Result<BTreeMap<String, bool>, CoreError> {
+fn native_skill_overrides(path: &Path) -> Result<BTreeMap<PathBuf, bool>, CoreError> {
     Ok(read_config(AgentKind::Codex, path)?
         .pointer("/skills/config")
         .and_then(Value::as_array)
@@ -198,7 +198,7 @@ fn native_skill_overrides(path: &Path) -> Result<BTreeMap<String, bool>, CoreErr
         .flatten()
         .filter_map(|v| {
             Some((
-                v.get("path")?.as_str()?.to_string(),
+                PathBuf::from(v.get("path")?.as_str()?),
                 v.get("enabled")?.as_bool()?,
             ))
         })
@@ -208,7 +208,7 @@ fn native_skill_overrides(path: &Path) -> Result<BTreeMap<String, bool>, CoreErr
 fn scan_skills(
     root: &Path,
     project: bool,
-    native: &BTreeMap<String, bool>,
+    native: &BTreeMap<PathBuf, bool>,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<SkillInfo>, CoreError> {
     let entries = match std::fs::read_dir(root) {
@@ -280,14 +280,9 @@ fn scan_skills(
             .collect();
         let skill_file = path.join("SKILL.md");
         let enabled = native
-            .get(skill_file.to_string_lossy().as_ref())
-            .or_else(|| {
-                skill_file
-                    .canonicalize()
-                    .ok()
-                    .and_then(|p| native.get(p.to_string_lossy().as_ref()))
-            })
-            .or_else(|| native.get(path.to_string_lossy().as_ref()))
+            .get(&skill_file)
+            .or_else(|| skill_file.canonicalize().ok().and_then(|p| native.get(&p)))
+            .or_else(|| native.get(&path))
             .copied()
             .unwrap_or(true);
         let path = path.to_string_lossy().into_owned();
@@ -418,8 +413,14 @@ fn discover(
 }
 
 fn apply_preferences(catalog: &mut ExtensionCatalog, prefs: &Preferences) {
+    // Path comparisons account for Windows accepting both separator styles.
+    let skills: BTreeMap<_, _> = prefs
+        .skills
+        .iter()
+        .map(|(path, enabled)| (Path::new(path), *enabled))
+        .collect();
     for skill in &mut catalog.skills {
-        if let Some(v) = prefs.skills.get(&skill.path) {
+        if let Some(v) = skills.get(Path::new(&skill.path)) {
             skill.enabled = *v;
         }
     }
@@ -1170,8 +1171,8 @@ fn remove_owned_bridge(path: &Path, previous: &Value) -> Result<(), CoreError> {
         return Ok(());
     };
     if meta.file_type().is_symlink() {
-        if std::fs::read_link(path).map_err(io)?.to_string_lossy()
-            == previous["source"].as_str().unwrap_or("")
+        if std::fs::read_link(path).map_err(io)?
+            == Path::new(previous["source"].as_str().unwrap_or(""))
         {
             #[cfg(windows)]
             std::fs::remove_dir(path).map_err(io)?;
