@@ -207,6 +207,12 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Collect Linux packages alongside the other installers
+        run: |
+          mv dist/deb/*.deb dist/
+          mv dist/appimage/*.AppImage dist/
+          rmdir dist/deb dist/appimage
+
       - name: Write checksums
         working-directory: dist
         run: |
