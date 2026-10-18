@@ -86,6 +86,8 @@ impl Mock {
                                     assert_eq!(body["model"],"yolo");
                                     assert!(body.get("store").is_none());
                                     assert!(body["messages"].as_array().unwrap().iter().all(|m| m["role"]!="developer"));
+                                    let messages = body["messages"].as_array().unwrap();
+                                    assert!(messages.iter().enumerate().all(|(index, message)| message["role"] != "system" || index == 0), "System message must be at the beginning");
                                     let n = { let mut captured=requests.lock().unwrap(); captured.push(body.clone()); captured.len() };
                                     if status != StatusCode::OK {
                                         let mut response = failure(status,"NEVER-ECHO-THIS-secret");
