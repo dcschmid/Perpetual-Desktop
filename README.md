@@ -28,6 +28,16 @@ Project MCP servers require explicit activation in Perpetual. Changing a server'
 
 Isolated accounts inherit extension configuration and skill folders while keeping their own sign-in credentials. Missing project skills are made available in managed worktrees; generated links use private worktree Git exclusions so they stay out of task commits while the original project files remain available to commit. Existing worktree skill files are preserved. Claude Code local runs use a private, filtered MCP configuration; plugin MCP servers need a direct server entry to participate. Docker and cloud runs continue to use their own installed extensions, configuration and credentials.
 
+## OpenAI-compatible endpoints
+
+Open **Settings → Endpoints → Add endpoint** to configure a gateway name, its API base URL (for example `https://gateway.example/v1`), an optional API key, and exact model IDs or routing aliases such as `yolo-auto`. Enabled models appear as **Gateway · Model** in the Codex model menu; you can also choose one as the default under **Settings → Models**. Codex CLI must be installed, but a separate OpenAI sign-in is not required for these endpoints.
+
+Gateways must support the **Responses API**, streaming, and the tool calls used by Codex. Endpoints exposing only `/chat/completions` need a Responses-compatible adapter. Perpetual passes the model ID unchanged, so aliases work when the gateway provides them. **Save and discover models** makes a read-only request to `/models`; model IDs can always be entered manually, and discovery alone does not verify inference or tool-call compatibility.
+
+API keys stay in the system credential store, separate from endpoint settings and conversation history. On Linux, kernel keyring entries can expire or disappear on reboot; save the key again if prompted. Leaving the key field blank preserves an existing key. Changing the URL clears it so credentials do not follow an edited address. Disabled or removed endpoints cannot start another run. Endpoint selection is explicit and never becomes an automatic offline fallback; existing cloud sign-ins and CLI configuration remain available.
+
+Custom endpoints currently run through Codex on the local **Host** backend. When a gateway is limited or unavailable, its task pauses for you to retry; its quota does not change your OpenAI account status or trigger account switching. Docker and cloud runs use their own provider configuration and credentials.
+
 ## Build from source
 
 Install [Git](https://git-scm.com/downloads) and Node.js 24 LTS (also supported: Node 22.13+ on 22.x, or 26+). Use Windows, macOS, or a glibc-based Linux distribution with WebKitGTK 4.1 (Ubuntu 22.04+, Debian 12+, Linux Mint 21+, or equivalent). Linux source builds support x86_64 and ARM64; CI packages target x86_64. On Windows, [App Installer](https://apps.microsoft.com/detail/9nblggh4nns1) provides `winget` for installing missing system tools.

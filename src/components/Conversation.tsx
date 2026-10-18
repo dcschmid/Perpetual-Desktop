@@ -420,6 +420,15 @@ function SetupNotice({ onNavigate }: { onNavigate: (page: string) => void }) {
   const store = useStore();
   if (!native || store.loading || !store.agents.length) return null;
   if (PROVIDERS.some((agent) => activeAccount(store.accounts, agent))) return null;
+  if (
+    store.agents.some((a) => a.kind === 'codex' && a.installed) &&
+    store.models.some(
+      (c) =>
+        c.agent === 'codex' &&
+        c.models.some((m) => m.available && m.source === 'openai_compatible'),
+    )
+  )
+    return null;
   const installed = PROVIDERS.filter(
     (agent) => store.agents.find((a) => a.kind === agent)?.installed,
   );

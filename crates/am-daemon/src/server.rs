@@ -351,6 +351,23 @@ pub async fn dispatch(core: &AppCore, req: DaemonRequest) -> Result<DaemonRespon
         Q::DetectAgents => A::AgentStatuses(core.detect_agents().await.map_err(s)?),
         Q::AgentRunDefaults => A::AgentRunDefaults(core.agent_run_defaults().await.map_err(s)?),
         Q::AgentModelCatalog => A::AgentModelCatalogs(core.agent_model_catalog().await.map_err(s)?),
+        Q::GetOpenaiEndpoints => A::OpenaiEndpoints(core.get_openai_endpoints().await.map_err(s)?),
+        Q::SaveOpenaiEndpoint(endpoint) => {
+            A::OpenaiEndpoint(core.save_openai_endpoint(endpoint).await.map_err(s)?)
+        }
+        Q::DeleteOpenaiEndpoint { id } => {
+            core.delete_openai_endpoint(&id).await.map_err(s)?;
+            A::Unit
+        }
+        Q::SetOpenaiEndpointKey { id, key } => {
+            core.set_openai_endpoint_key(&id, key.as_str())
+                .await
+                .map_err(s)?;
+            A::Unit
+        }
+        Q::ProbeOpenaiEndpoint { id } => {
+            A::OpenaiEndpointProbe(core.probe_openai_endpoint(&id).await.map_err(s)?)
+        }
         Q::DetectLocalModels => A::LocalModelStatuses(core.detect_local_models().await.map_err(s)?),
         Q::GetLocalModelPolicy => {
             A::LocalModelPolicy(core.get_local_model_policy().await.map_err(s)?)

@@ -190,9 +190,12 @@ impl AppCore {
     /// intentionally dynamic so shipping a new model does not require an app
     /// release.
     pub async fn agent_model_catalog(&self) -> Result<Vec<AgentModelCatalog>, CoreError> {
-        let catalogs = tokio::task::spawn_blocking(build_agent_model_catalog)
+        let mut catalogs = tokio::task::spawn_blocking(build_agent_model_catalog)
             .await
             .map_err(|e| CoreError::Other(e.to_string()))?;
+        if let Some(catalog) = catalogs.iter_mut().find(|c| c.agent == AgentKind::Codex) {
+            catalog.models.extend(self.openai_endpoint_models().await?);
+        }
         Ok(catalogs)
     }
 

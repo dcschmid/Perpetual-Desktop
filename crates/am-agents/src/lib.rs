@@ -184,13 +184,24 @@ impl std::fmt::Debug for AgentPolicyRuntime {
     }
 }
 
-/// Local provider target passed to adapters that can run against local models.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Local host or custom gateway target; the token is child-only launch data.
+#[derive(Clone, PartialEq, Eq)]
 pub struct LocalModelRuntime {
     pub provider: am_proto::LocalModelProviderKind,
     pub model: String,
     pub base_url: Option<String>,
     pub api_token: Option<String>,
+}
+
+impl std::fmt::Debug for LocalModelRuntime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LocalModelRuntime")
+            .field("provider", &self.provider)
+            .field("model", &self.model)
+            .field("base_url", &self.base_url)
+            .field("api_token_configured", &self.api_token.is_some())
+            .finish()
+    }
 }
 
 /// Timeouts and termination grace for a launched agent process.

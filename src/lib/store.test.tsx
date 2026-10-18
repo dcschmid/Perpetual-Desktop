@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StoreProvider, useStore } from './store';
 import { rpc } from './api';
-import type { LimitPolicy } from './types';
+import type { AgentModelCatalog, AgentModelOption, AgentThread, LimitPolicy } from './types';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Composer } from '../components/Composer';
 import { Accounts } from '../components/Accounts';
@@ -142,6 +142,143 @@ describe('message submission', () => {
     await act(async () => render('Next draft', 2));
     await act(async () => complete(true));
     expect(container.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('Next draft');
+  });
+});
+
+describe('OpenAI-compatible endpoint selection', () => {
+  const first: AgentModelOption = {
+    id: 'perpetual-endpoint/one/yolo-auto',
+    label: 'First · yolo-auto',
+    aliases: ['yolo-auto'],
+    family: null,
+    default: false,
+    available: true,
+    source: 'openai_compatible',
+    reasoning: [],
+    local_provider: 'openai_compatible',
+    local_base_url: 'https://first.test/v1',
+  };
+  const second = {
+    ...first,
+    id: 'perpetual-endpoint/two/yolo-auto',
+    label: 'Second · yolo-auto',
+    local_base_url: 'https://second.test/v1',
+  };
+  const catalog = (models: AgentModelOption[]): AgentModelCatalog => ({
+    agent: 'codex',
+    models,
+    default_model: null,
+    default_reasoning: null,
+    reasoning: [],
+    binary_path: '/bin/codex',
+    version: '1',
+    source: 'codex',
+    detected_at: '',
+    error: null,
+  });
+
+  it('carries endpoint metadata for defaults, switches, and saved thread followups', async () => {
+    localStorage.clear();
+    const implementation = vi.mocked(rpc).getMockImplementation()!;
+    vi.mocked(rpc).mockImplementation(async (name, payload) =>
+      name === 'agent_model_catalog' ? [catalog([first, second])] : implementation(name, payload),
+    );
+    await act(async () => {
+      await store.detect();
+      store.setModelDefault('codex', first.id);
+    });
+    const onSend = vi.fn().mockResolvedValue(true);
+    const render = (text: string, seq: number, thread?: AgentThread) =>
+      root.render(
+        <StoreProvider>
+          <Capture />
+          <Tooltip.Provider>
+            <Composer
+              thread={thread}
+              draft={{ text, seq }}
+              busy={false}
+              onSend={onSend}
+              onStop={() => {}}
+              onCommand={() => {}}
+              onNavigate={() => {}}
+            />
+          </Tooltip.Provider>
+        </StoreProvider>,
+      );
+    const send = async () =>
+      act(async () =>
+        container.querySelector<HTMLButtonElement>('button[aria-label="Send"]')!.click(),
+      );
+    await act(async () => render('First', 1));
+    await send();
+    expect(onSend.mock.calls[0][1]).toMatchObject({
+      model: first.id,
+      local_provider: 'openai_compatible',
+      local_base_url: first.local_base_url,
+    });
+    await act(async () => {
+      store.setModelSelection('codex', second.id, '');
+      render('Second', 2);
+    });
+    await send();
+    expect(onSend.mock.calls[1][1]).toMatchObject({
+      model: second.id,
+      local_base_url: second.local_base_url,
+    });
+    await act(async () => {
+      store.setModelSelection('codex', '', '');
+      render('Follow up', 3, {
+        id: 'thread',
+        active_agent: 'codex',
+        model: first.id,
+        local_provider: 'openai_compatible',
+        local_base_url: first.local_base_url,
+        task_budget: { mode: 'unlimited' },
+      } as AgentThread);
+    });
+    // No explicit preference: the persisted thread supplies the selection.
+    await act(async () => store.setModelDefault('codex', ''));
+    await send();
+    expect(onSend.mock.calls[2][1]).toMatchObject({
+      model: first.id,
+      local_provider: 'openai_compatible',
+      local_base_url: first.local_base_url,
+    });
+    localStorage.clear();
+  });
+
+  it('removes stale endpoints after a forced refresh races an older detection', async () => {
+    const implementation = vi.mocked(rpc).getMockImplementation()!;
+    let models = [first, second];
+    let release: (() => void) | undefined;
+    vi.mocked(rpc).mockImplementation(async (name, payload) => {
+      if (name === 'agent_model_catalog') {
+        const snapshot = [...models];
+        if (release)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        return [catalog(snapshot)];
+      }
+      return implementation(name, payload);
+    });
+    await act(async () => store.detect());
+    expect(store.models[0].models).toHaveLength(2);
+    release = () => {};
+    let pending!: Promise<void>;
+    let refreshed!: Promise<void>;
+    await act(async () => {
+      pending = store.detect();
+    });
+    models = [];
+    await act(async () => {
+      refreshed = store.detect();
+      const finish = release!;
+      release = undefined;
+      finish();
+      await Promise.all([pending, refreshed]);
+    });
+    expect(store.models[0].models).toEqual([]);
   });
 });
 

@@ -1,11 +1,14 @@
 use serde::{Deserialize, Serialize};
 
-/// Local model hosts Perpetual can use for offline fallback.
+/// Model hosts addressed through Codex provider overrides. Only Ollama and
+/// LM Studio participate in automatic offline fallback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalModelProviderKind {
     Ollama,
     LmStudio,
+    /// User-configured gateway; never an automatic offline fallback.
+    OpenAiCompatible,
 }
 
 impl LocalModelProviderKind {
@@ -13,6 +16,7 @@ impl LocalModelProviderKind {
         match self {
             LocalModelProviderKind::Ollama => "ollama",
             LocalModelProviderKind::LmStudio => "lm_studio",
+            LocalModelProviderKind::OpenAiCompatible => "openai_compatible",
         }
     }
 
@@ -20,6 +24,7 @@ impl LocalModelProviderKind {
         match self {
             LocalModelProviderKind::Ollama => "ollama",
             LocalModelProviderKind::LmStudio => "lmstudio",
+            LocalModelProviderKind::OpenAiCompatible => "perpetual_endpoint",
         }
     }
 
@@ -27,6 +32,7 @@ impl LocalModelProviderKind {
         match self {
             LocalModelProviderKind::Ollama => "Ollama",
             LocalModelProviderKind::LmStudio => "LM Studio",
+            LocalModelProviderKind::OpenAiCompatible => "OpenAI-compatible endpoint",
         }
     }
 
@@ -34,6 +40,7 @@ impl LocalModelProviderKind {
         match self {
             LocalModelProviderKind::Ollama => "http://127.0.0.1:11434",
             LocalModelProviderKind::LmStudio => "http://127.0.0.1:1234",
+            LocalModelProviderKind::OpenAiCompatible => "",
         }
     }
 
@@ -41,6 +48,7 @@ impl LocalModelProviderKind {
         Some(match s {
             "ollama" => LocalModelProviderKind::Ollama,
             "lm_studio" | "lmstudio" => LocalModelProviderKind::LmStudio,
+            "openai_compatible" => LocalModelProviderKind::OpenAiCompatible,
             _ => return None,
         })
     }

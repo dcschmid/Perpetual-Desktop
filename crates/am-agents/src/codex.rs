@@ -356,10 +356,26 @@ const LOCAL_PROVIDER_ID: &str = "perpetual_local";
 
 fn push_local_model_args(args: &mut Vec<String>, local: &LocalModelRuntime) {
     if uses_builtin_local_provider(local) {
-        args.push("--oss".into());
+        args.extend([
+            "--oss".into(),
+            "-c".into(),
+            format!(
+                "oss_provider={}",
+                toml_string(local.provider.codex_oss_provider())
+            ),
+        ]);
+    } else {
+        push_model_provider_args(args, local);
+    }
+    args.push("--model".into());
+    args.push(local.model.trim().to_string());
+}
+
+pub(crate) fn push_model_provider_args(args: &mut Vec<String>, local: &LocalModelRuntime) {
+    if uses_builtin_local_provider(local) {
         args.push("-c".into());
         args.push(format!(
-            "oss_provider={}",
+            "model_provider={}",
             toml_string(local.provider.codex_oss_provider())
         ));
     } else {
@@ -368,13 +384,31 @@ fn push_local_model_args(args: &mut Vec<String>, local: &LocalModelRuntime) {
         args.push("-c".into());
         args.push(format!(
             "model_providers.{LOCAL_PROVIDER_ID}.name={}",
-            toml_string("Perpetual Local")
+            toml_string(
+                if local.provider == am_proto::LocalModelProviderKind::OpenAiCompatible {
+                    "Perpetual Endpoint"
+                } else {
+                    "Perpetual Local"
+                }
+            )
         ));
         args.push("-c".into());
         args.push(format!(
             "model_providers.{LOCAL_PROVIDER_ID}.base_url={}",
             toml_string(&local_openai_base_url(local))
         ));
+        args.extend([
+            "-c".into(),
+            format!("model_providers.{LOCAL_PROVIDER_ID}.wire_api=\"responses\""),
+        ]);
+        args.extend([
+            "-c".into(),
+            format!("model_providers.{LOCAL_PROVIDER_ID}.requires_openai_auth=false"),
+        ]);
+        args.extend([
+            "-c".into(),
+            format!("model_providers.{LOCAL_PROVIDER_ID}.supports_websockets=false"),
+        ]);
         if local
             .api_token
             .as_ref()
@@ -387,16 +421,14 @@ fn push_local_model_args(args: &mut Vec<String>, local: &LocalModelRuntime) {
             ));
         }
     }
-
-    args.push("--model".into());
-    args.push(local.model.trim().to_string());
 }
 
 fn uses_builtin_local_provider(local: &LocalModelRuntime) -> bool {
-    local
-        .api_token
-        .as_ref()
-        .is_none_or(|token| token.trim().is_empty())
+    local.provider != am_proto::LocalModelProviderKind::OpenAiCompatible
+        && local
+            .api_token
+            .as_ref()
+            .is_none_or(|token| token.trim().is_empty())
         && local
             .base_url
             .as_deref()
@@ -411,7 +443,8 @@ fn local_openai_base_url(local: &LocalModelRuntime) -> String {
             .as_deref()
             .unwrap_or_else(|| local.provider.default_base_url()),
     );
-    if base.ends_with("/v1") {
+    if local.provider == am_proto::LocalModelProviderKind::OpenAiCompatible || base.ends_with("/v1")
+    {
         base
     } else {
         format!("{base}/v1")
@@ -1193,6 +1226,51 @@ mod tests {
                 "secret-token".to_string()
             )]
         );
+    }
+
+    #[test]
+    fn gateway_models_preserve_aliases_paths_and_keep_keys_out_of_args_and_debug() {
+        for model in ["yolo-auto", "vendor/Model-A", "auto", "default"] {
+            let mut spec = SessionSpec {
+                worktree: "/tmp/worktree".into(),
+                prompt: "Test".into(),
+                model: Some("perpetual-endpoint/a/model".into()),
+                reasoning: None,
+                local_model: Some(LocalModelRuntime {
+                    provider: am_proto::LocalModelProviderKind::OpenAiCompatible,
+                    model: model.into(),
+                    base_url: Some("https://example.test/Gateway".into()),
+                    api_token: Some("gateway-secret".into()),
+                }),
+                permission: PermissionPolicy::ReadOnly,
+                runtime: crate::SessionRuntime::default(),
+                policy: None,
+                approver: None,
+            };
+            let args = build_args(&spec, None);
+            assert!(args.windows(2).any(|pair| pair == ["--model", model]));
+            assert!(!args.iter().any(|arg| arg == "--oss"
+                || arg.contains("gateway-secret")
+                || arg.contains("perpetual-endpoint/")));
+            assert!(args.iter().any(|arg| arg
+                == "model_providers.perpetual_local.base_url=\"https://example.test/Gateway\""));
+            assert!(args
+                .iter()
+                .any(|arg| arg == "model_providers.perpetual_local.wire_api=\"responses\""));
+            assert!(args
+                .iter()
+                .any(|arg| arg == "model_providers.perpetual_local.requires_openai_auth=false"));
+            assert!(!format!("{spec:?}").contains("gateway-secret"));
+            assert_eq!(
+                session_env(&spec),
+                [(LOCAL_MODEL_TOKEN_ENV.into(), "gateway-secret".into())]
+            );
+            spec.local_model.as_mut().unwrap().api_token = None;
+            assert!(session_env(&spec).is_empty());
+            assert!(!build_args(&spec, None)
+                .iter()
+                .any(|arg| arg.contains("env_key")));
+        }
     }
 
     #[test]

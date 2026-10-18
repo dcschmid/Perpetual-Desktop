@@ -16,6 +16,7 @@ import {
   CircleAlert,
   CircleCheck,
   Puzzle,
+  Plug,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Theme } from '../App';
@@ -24,6 +25,7 @@ import { errorMessage, providerName } from '../lib/format';
 import { useStore } from '../lib/store';
 import { credentialStore, keys } from '../lib/platform';
 import { ExtensionsSettings } from './ExtensionsSettings';
+import { EndpointSettings } from './EndpointSettings';
 import type {
   AgentKind,
   CloudAvailability,
@@ -51,6 +53,7 @@ const REPO = 'https://github.com/SakethSripada/Perpetual-Desktop';
 const sections = [
   { id: 'general', label: 'General', icon: Monitor },
   { id: 'models', label: 'Models', icon: Cpu },
+  { id: 'endpoints', label: 'Endpoints', icon: Plug },
   { id: 'extensions', label: 'Skills & MCP', icon: Puzzle },
   { id: 'cloud', label: 'Cloud', icon: Cloud },
   { id: 'local_model', label: 'Local models', icon: Cpu },
@@ -83,6 +86,7 @@ export function Settings({ theme, setTheme }: { theme: Theme; setTheme: (v: Them
         <div className="min-w-0 flex-1">
           {section === 'general' && <General theme={theme} setTheme={setTheme} />}
           {section === 'models' && <ModelSettings />}
+          {section === 'endpoints' && <EndpointSettings />}
           {section === 'extensions' && <ExtensionsSettings />}
           {section === 'cloud' && <CloudSettings />}
           {section === 'local_model' && <LocalModelSettings />}
@@ -134,13 +138,21 @@ function ModelSettings() {
                     </option>
                   ))}
                 {preferred && !catalog?.models.some((model) => model.id === preferred) && (
-                  <option value={preferred}>{preferred}</option>
+                  <option value={preferred}>
+                    {preferred.startsWith('perpetual-endpoint/')
+                      ? 'Endpoint unavailable (choose a model)'
+                      : preferred}
+                  </option>
                 )}
               </Select>
             </Row>
             <div className="divide-y divide-line/60">
               {catalog?.models.map((model) => (
-                <Row key={model.id} label={model.label} description={model.id}>
+                <Row
+                  key={model.id}
+                  label={model.label}
+                  description={model.source === 'openai_compatible' ? model.aliases[0] : model.id}
+                >
                   <Button
                     size="sm"
                     variant="secondary"

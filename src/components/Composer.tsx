@@ -165,13 +165,19 @@ export function Composer({
     catalog?.models.filter(
       (m) => (m.available || m.id === model) && !hiddenModels.includes(m.id),
     ) ?? [];
-  const chosenModel = catalog?.models.find((m) => m.id === model);
+  const chosenModel = catalog?.models.find(
+    (m) => m.id === (model || (!thread ? preferredDefault : '')),
+  );
   const defaultModel =
     catalog?.models.find((m) => m.id === preferredDefault) ??
     catalog?.models.find((m) => m.id === catalog.default_model) ??
     catalog?.models.find((m) => m.default);
   const displayedModel = chosenModel ?? (!model ? defaultModel : undefined);
-  const modelLabel = displayedModel?.label ?? (model || `${providerName(agent)} chooses`);
+  const modelLabel =
+    displayedModel?.label ??
+    (model.startsWith('perpetual-endpoint/')
+      ? 'Endpoint unavailable'
+      : model || `${providerName(agent)} chooses`);
   const defaultReasoning = displayedModel?.default_reasoning ?? catalog?.default_reasoning;
   const reasoningLabel = reasoning || defaultReasoning || `${providerName(agent)} chooses`;
   const efforts = displayedModel?.reasoning ?? catalog?.reasoning ?? [];
@@ -182,13 +188,13 @@ export function Composer({
   // A new task starts on a provider that can run it, unless the person picks one.
   const picked = useRef(!!thread);
   useEffect(() => {
-    if (picked.current || !store.accounts.length) return;
+    if (picked.current || chosenModel?.local_provider || !store.accounts.length) return;
     picked.current = true;
     const other = PROVIDERS.find((p) => p !== agent);
     if (!account && other && activeAccount(store.accounts, other)) setAgent(other);
   }, [store.accounts]);
   const providerAccounts = store.accounts.filter((a) => a.agent === agent);
-  const managed = providerAccounts.length > 0;
+  const managed = providerAccounts.length > 0 && !chosenModel?.local_provider;
   const allLimited =
     managed && !account && providerAccounts.some((a) => accountState(a) === 'limited');
 
@@ -360,8 +366,12 @@ export function Composer({
           reasoning: reasoning || null,
           repo_ids: repos,
           task_budget: budget,
-          local_provider: chosenModel?.local_provider,
-          local_base_url: chosenModel?.local_base_url,
+          local_provider:
+            chosenModel?.local_provider ??
+            (threadUsesAgent && thread?.model === model ? thread.local_provider : null),
+          local_base_url:
+            chosenModel?.local_base_url ??
+            (threadUsesAgent && thread?.model === model ? thread.local_base_url : null),
         })
       ) {
         setText((current) => (current === submittedText ? '' : current));

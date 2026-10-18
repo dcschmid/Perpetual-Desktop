@@ -81,6 +81,9 @@ pub(crate) async fn launch(
 /// narrow that configuration according to Perpetual's effective run policy.
 fn app_server_args(spec: &SessionSpec) -> Vec<String> {
     let mut args = vec!["app-server".to_string()];
+    if let Some(local) = &spec.local_model {
+        crate::codex::push_model_provider_args(&mut args, local);
+    }
     if let Some(policy) = spec.policy.as_ref() {
         crate::codex::push_policy_args(&mut args, policy);
     }
@@ -394,12 +397,16 @@ fn thread_start_params(spec: &SessionSpec) -> Value {
             PermissionPolicy::WorkspaceWrite | PermissionPolicy::Ask => "workspace-write",
         },
     });
-    if let Some(model) = spec
-        .model
-        .as_deref()
-        .map(str::trim)
-        .filter(|m| !m.is_empty() && !matches!(*m, "default" | "auto"))
-    {
+    let model = spec
+        .local_model
+        .as_ref()
+        .map(|m| m.model.as_str())
+        .or_else(|| {
+            spec.model
+                .as_deref()
+                .filter(|m| !matches!(m.trim(), "default" | "auto"))
+        });
+    if let Some(model) = model.map(str::trim).filter(|m| !m.is_empty()) {
         params["model"] = json!(model);
     }
     params
@@ -1283,6 +1290,45 @@ mod tests {
         ));
     }
     use super::*;
+
+    #[test]
+    fn gateway_config_and_raw_model_apply_to_new_and_resumed_host_threads() {
+        for model in ["yolo-auto", "vendor/Model-A", "auto", "default"] {
+            let spec = SessionSpec {
+                worktree: "/tmp/wt".into(),
+                prompt: "Test".into(),
+                model: Some("perpetual-endpoint/a/model".into()),
+                reasoning: None,
+                local_model: Some(crate::LocalModelRuntime {
+                    provider: am_proto::LocalModelProviderKind::OpenAiCompatible,
+                    model: model.into(),
+                    base_url: Some("https://example.test/gateway/v1".into()),
+                    api_token: Some("gateway-secret".into()),
+                }),
+                permission: PermissionPolicy::ReadOnly,
+                runtime: crate::SessionRuntime::default(),
+                policy: None,
+                approver: None,
+            };
+            let args = app_server_args(&spec);
+            assert!(!args
+                .iter()
+                .any(|arg| arg == "--oss" || arg.contains("gateway-secret")));
+            assert!(args
+                .iter()
+                .any(|arg| arg == "model_provider=\"perpetual_local\""));
+            assert!(args.iter().any(|arg| arg
+                == "model_providers.perpetual_local.base_url=\"https://example.test/gateway/v1\""));
+            for params in [
+                thread_start_params(&spec),
+                thread_resume_params(&spec, "existing"),
+            ] {
+                assert_eq!(params["model"], model);
+                assert_eq!(params["approvalPolicy"], "never");
+                assert_eq!(params["sandbox"], "read-only");
+            }
+        }
+    }
 
     #[test]
     fn approval_policy_per_permission() {
