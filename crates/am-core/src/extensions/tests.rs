@@ -496,7 +496,7 @@ fn codex_skill_overrides_use_the_skill_file_for_native_and_managed_paths() {
     for expected in [file, workspace.join(".agents/skills/review/SKILL.md")] {
         assert!(rules
             .iter()
-            .any(|v| v["path"] == expected.to_string_lossy().as_ref() && v["enabled"] == false));
+            .any(|v| Path::new(v["path"].as_str().unwrap()) == expected && v["enabled"] == false));
     }
     assert!(rules
         .iter()
