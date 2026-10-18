@@ -73,6 +73,7 @@ impl CodexAdapter {
             }
         }
 
+        let bridge = crate::chat_completions::prepare(&mut spec).await?;
         let (plain, attachments) = crate::attachments::unpack(&spec.prompt)?;
         spec.prompt = plain;
         let mut args = build_args(&spec, resume.as_ref());
@@ -101,7 +102,10 @@ impl CodexAdapter {
         let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
 
         let limits = spec.runtime.limits();
-        tokio::spawn(drive(child, stdout, stderr, tx, cancel_rx, limits));
+        tokio::spawn(async move {
+            let _bridge = bridge;
+            drive(child, stdout, stderr, tx, cancel_rx, limits).await;
+        });
 
         Ok(SessionHandle {
             events: rx,
@@ -372,6 +376,18 @@ fn push_local_model_args(args: &mut Vec<String>, local: &LocalModelRuntime) {
 }
 
 pub(crate) fn push_model_provider_args(args: &mut Vec<String>, local: &LocalModelRuntime) {
+    if local.api == am_proto::EndpointApi::ChatCompletions {
+        // Hosted web search has no Chat Completions equivalent. Do not retry an
+        // interrupted inference automatically: a gateway may already charge it.
+        args.extend([
+            "-c".into(),
+            "web_search=\"disabled\"".into(),
+            "-c".into(),
+            format!("model_providers.{LOCAL_PROVIDER_ID}.request_max_retries=0"),
+            "-c".into(),
+            format!("model_providers.{LOCAL_PROVIDER_ID}.stream_max_retries=0"),
+        ]);
+    }
     if uses_builtin_local_provider(local) {
         args.push("-c".into());
         args.push(format!(
@@ -1134,6 +1150,7 @@ mod tests {
             model: Some("gpt-5.5".into()),
             reasoning: None,
             local_model: Some(LocalModelRuntime {
+                api: am_proto::EndpointApi::Responses,
                 provider: am_proto::LocalModelProviderKind::Ollama,
                 model: "qwen3:8b".into(),
                 base_url: None,
@@ -1162,6 +1179,7 @@ mod tests {
             model: None,
             reasoning: None,
             local_model: Some(LocalModelRuntime {
+                api: am_proto::EndpointApi::Responses,
                 provider: am_proto::LocalModelProviderKind::LmStudio,
                 model: "local-qwen".into(),
                 base_url: Some("http://127.0.0.1:1234/".into()),
@@ -1191,6 +1209,7 @@ mod tests {
             model: None,
             reasoning: None,
             local_model: Some(LocalModelRuntime {
+                api: am_proto::EndpointApi::Responses,
                 provider: am_proto::LocalModelProviderKind::LmStudio,
                 model: "custom-model".into(),
                 base_url: Some("http://localhost:4321".into()),
@@ -1237,6 +1256,7 @@ mod tests {
                 model: Some("perpetual-endpoint/a/model".into()),
                 reasoning: None,
                 local_model: Some(LocalModelRuntime {
+                    api: am_proto::EndpointApi::Responses,
                     provider: am_proto::LocalModelProviderKind::OpenAiCompatible,
                     model: model.into(),
                     base_url: Some("https://example.test/Gateway".into()),

@@ -32,6 +32,7 @@ mod process;
 mod runtime;
 
 pub mod attachments;
+mod chat_completions;
 pub mod claude;
 pub mod cloud;
 pub mod codex;
@@ -188,6 +189,7 @@ impl std::fmt::Debug for AgentPolicyRuntime {
 #[derive(Clone, PartialEq, Eq)]
 pub struct LocalModelRuntime {
     pub provider: am_proto::LocalModelProviderKind,
+    pub api: am_proto::EndpointApi,
     pub model: String,
     pub base_url: Option<String>,
     pub api_token: Option<String>,
@@ -197,6 +199,7 @@ impl std::fmt::Debug for LocalModelRuntime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LocalModelRuntime")
             .field("provider", &self.provider)
+            .field("api", &self.api)
             .field("model", &self.model)
             .field("base_url", &self.base_url)
             .field("api_token_configured", &self.api_token.is_some())

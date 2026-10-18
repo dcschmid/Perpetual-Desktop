@@ -140,6 +140,7 @@ impl AppCore {
         let (endpoint, model) = resolve_selection(&endpoints, selection, base_url)?;
         Ok(LocalModelRuntime {
             provider: LocalModelProviderKind::OpenAiCompatible,
+            api: endpoint.api,
             model: model.to_string(),
             base_url: Some(endpoint.base_url.clone()),
             api_token: self.load_endpoint_key(endpoint)?,
@@ -363,6 +364,7 @@ mod tests {
     fn endpoint(id: &str) -> OpenAiEndpoint {
         OpenAiEndpoint {
             id: id.into(),
+            api: am_proto::EndpointApi::Responses,
             label: "Gateway".into(),
             base_url: "https://example.test/v1/".into(),
             models: vec![
@@ -402,6 +404,7 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let core = AppCore::new(&root).await.unwrap();
         let mut input = endpoint("one");
+        input.api = am_proto::EndpointApi::ChatCompletions;
         input.api_key_configured = true; // Client cannot forge credential state.
         let mut saved = core.save_openai_endpoint(input).await.unwrap();
         assert!(!saved.api_key_configured);
@@ -425,6 +428,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(run.model, "yolo-auto");
+        assert_eq!(run.api, am_proto::EndpointApi::ChatCompletions);
         assert_eq!(run.api_token.as_deref(), Some("test-only-secret"));
         assert!(core
             .local_model_runtime(None, Some(models[0].id.clone()), None)

@@ -42,6 +42,7 @@ export interface OpenAiEndpoint {
   id: string;
   label: string;
   base_url: string;
+  api?: 'responses' | 'chat_completions';
   models: string[];
   enabled: boolean;
   api_key_configured: boolean;

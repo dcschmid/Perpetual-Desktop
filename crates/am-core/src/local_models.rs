@@ -152,6 +152,7 @@ impl AppCore {
             LocalModelProviderKind::OpenAiCompatible => unreachable!(),
         };
         Ok(Some(LocalModelRuntime {
+            api: am_proto::EndpointApi::Responses,
             provider,
             model: model.to_string(),
             base_url: base_url
